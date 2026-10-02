@@ -1,0 +1,417 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>糖果大作戰 — STEAM 教學示範</title>
+<style>
+  * { margin:0; padding:0; box-sizing:border-box; }
+
+  body {
+    min-height: 100vh;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    background: radial-gradient(circle at 50% 0%, #3b2a5a 0%, #140d24 70%);
+    font-family: "PingFang TC", "Microsoft JhengHei", "Noto Sans TC", sans-serif;
+    color: #f1f5f9;
+    padding: 20px;
+  }
+
+  #game {
+    position: relative;
+    width: 480px;
+    height: 640px;
+    background: linear-gradient(180deg, #2a1b4d 0%, #3d2a6b 60%, #1e1438 100%);
+    border-radius: 22px;
+    overflow: hidden;
+    box-shadow: 0 24px 70px rgba(0,0,0,.7), inset 0 0 60px rgba(255,200,80,.08);
+    border: 2px solid rgba(255,200,80,.35);
+    user-select: none;
+    cursor: none;
+  }
+
+  /* soft candy-dot background */
+  #game::before {
+    content:'';
+    position:absolute; inset:0;
+    background-image:
+      radial-gradient(rgba(255,220,120,.10) 2px, transparent 2px),
+      radial-gradient(rgba(180,140,255,.08) 2px, transparent 2px);
+    background-size: 44px 44px, 66px 66px;
+    background-position: 0 0, 22px 22px;
+    pointer-events:none;
+  }
+
+  /* ---------- HUD ---------- */
+  #hud {
+    position:absolute; top:0; left:0; right:0;
+    display:flex; justify-content: space-between;
+    padding: 16px 20px;
+    z-index: 10; pointer-events:none;
+  }
+  .hud-item { display:flex; flex-direction:column; gap:2px; }
+  .hud-label { font-size:12px; color:#c4b5fd; letter-spacing:2px; }
+  .hud-value { font-size:24px; font-weight:800; font-variant-numeric: tabular-nums; }
+  #score { color:#fbbf24; text-shadow:0 0 12px rgba(251,191,36,.6); }
+  #lives { color:#f87171; letter-spacing:2px; }
+
+  /* ---------- Player (basket) ---------- */
+  #player {
+    position:absolute;
+    left: 0;
+    bottom: 24px;
+    width: 96px;
+    height: 26px;
+    border-radius: 8px 8px 50% 50% / 8px 8px 40% 40%;
+    background: linear-gradient(180deg, #fbbf24, #d97706);
+    box-shadow: 0 0 26px rgba(251,191,36,.75), inset 0 -5px 10px rgba(0,0,0,.3);
+    display:flex; align-items:center; justify-content:center;
+    font-size: 15px;
+  }
+  #player::after {
+    content:'';
+    position:absolute;
+    top:4px; left:14px; right:14px; height:5px;
+    border-radius:50%;
+    background: rgba(255,255,255,.4);
+  }
+
+  /* ---------- Falling items ---------- */
+  .item {
+    position:absolute;
+    top: 0; left: 0;
+    width: 54px; height: 54px;
+    border-radius: 50%;
+    display:flex; align-items:center; justify-content:center;
+    font-size: 30px;
+    line-height: 1;
+    will-change: transform;
+  }
+  .good {
+    background: radial-gradient(circle at 32% 26%, #fff7cc, #fcd34d 60%, #f59e0b 100%);
+    box-shadow: 0 0 20px rgba(252,211,77,.85);
+  }
+  .bad {
+    background: radial-gradient(circle at 32% 26%, #ffd6d6, #ef4444 60%, #991b1b 100%);
+    box-shadow: 0 0 20px rgba(239,68,68,.9);
+    animation: pulse 1s infinite alternate;
+  }
+  @keyframes pulse {
+    from { box-shadow: 0 0 14px rgba(239,68,68,.7); }
+    to   { box-shadow: 0 0 26px rgba(239,68,68,1); }
+  }
+
+  /* ---------- Score popup ---------- */
+  .pop {
+    position:absolute;
+    font-size:20px; font-weight:900;
+    pointer-events:none;
+    animation: pop .7s ease-out forwards;
+  }
+  .pop.plus  { color:#4ade80; }
+  .pop.minus { color:#f87171; }
+  @keyframes pop {
+    0%   { transform: translateY(0) scale(1);        opacity:1; }
+    100% { transform: translateY(-46px) scale(1.4);  opacity:0; }
+  }
+
+  /* ---------- Overlay ---------- */
+  #overlay {
+    position:absolute; inset:0;
+    background: rgba(15,8,30,.92);
+    backdrop-filter: blur(6px);
+    display:flex; flex-direction:column;
+    align-items:center; justify-content:center;
+    gap: 16px; text-align:center; padding: 30px;
+    z-index: 20; cursor: default;
+  }
+  #overlay.hidden { display:none; }
+
+  #overlay h1 {
+    font-size: 34px;
+    background: linear-gradient(90deg,#fbbf24,#f472b6);
+    -webkit-background-clip:text; background-clip:text;
+    color:transparent;
+    letter-spacing: 3px;
+  }
+  #overlay p { font-size:15px; color:#cbd5e1; line-height:1.8; max-width:330px; }
+
+  #btn {
+    margin-top:8px; padding:14px 46px;
+    border:none; border-radius:999px;
+    background: linear-gradient(90deg,#f59e0b,#ec4899);
+    color:#fff; font-size:17px; font-weight:800; letter-spacing:3px;
+    cursor:pointer;
+    box-shadow: 0 8px 26px rgba(236,72,153,.45);
+    transition: transform .15s, box-shadow .15s;
+    font-family: inherit;
+  }
+  #btn:hover  { transform: translateY(-2px); box-shadow: 0 12px 32px rgba(236,72,153,.6); }
+  #btn:active { transform: translateY(0); }
+
+  .legend { display:flex; gap:20px; font-size:13px; color:#cbd5e1; margin-top:4px; }
+  .legend span { display:flex; align-items:center; gap:6px; }
+
+  .final { font-size:17px; color:#e2e8f0; }
+  .final b { color:#fbbf24; font-size:30px; }
+</style>
+</head>
+<body>
+
+<div id="game">
+  <div id="hud">
+    <div class="hud-item">
+      <span class="hud-label">分數</span>
+      <span class="hud-value" id="score">0</span>
+    </div>
+    <div class="hud-item" style="align-items:flex-end">
+      <span class="hud-label">生命</span>
+      <span class="hud-value" id="lives">♥♥♥</span>
+    </div>
+  </div>
+
+  <div id="player">🧺</div>
+
+  <div id="overlay">
+    <h1>糖果大作戰</h1>
+    <p>用<b>滑鼠</b>、<b>方向鍵</b>或<b>觸控</b>移動籃子。<br>
+       接住<b>糖果</b>，避開<b>毒藥</b>！</p>
+    <div class="legend">
+      <span>🍬 🍭 🍩 🧁 糖果</span>
+      <span>☠️ ⚠️ 毒藥</span>
+    </div>
+    <button id="btn">開始遊戲</button>
+  </div>
+</div>
+
+<script>
+/* ============================================================
+   糖果大作戰 (Candy Catcher)
+   為小學 STEAM 課堂設計的網頁小遊戲
+   純 HTML / CSS / JavaScript 編寫
+   ============================================================ */
+
+// ---------- 設定 ----------
+const W = 480, H = 640;
+const PLAYER_W = 96;
+const PLAYER_BOTTOM = 24;
+const ITEM_SIZE = 54;
+const MAX_LIVES = 3;
+
+// 好東西：糖果甜點
+const GOOD = [
+  { emoji: '🍬', name: '糖果' },
+  { emoji: '🍭', name: '棒棒糖' },
+  { emoji: '🍩', name: '甜甜圈' },
+  { emoji: '🧁', name: '杯子蛋糕' },
+  { emoji: '🍫', name: '巧克力' }
+];
+
+// 壞東西：毒藥
+const BAD = [
+  { emoji: '☠️', name: '毒藥' },
+  { emoji: '⚠️', name: '危險' },
+  { emoji: '🧪', name: '毒液' }
+];
+
+// ---------- 元素 ----------
+const gameEl   = document.getElementById('game');
+const playerEl = document.getElementById('player');
+const scoreEl  = document.getElementById('score');
+const livesEl  = document.getElementById('lives');
+const overlay  = document.getElementById('overlay');
+
+// ---------- 狀態 ----------
+const keys = {};
+let state = null;
+let rafId = null;
+let lastTime = 0;
+
+// ---------- 工具 ----------
+const rand = (min, max) => Math.random() * (max - min) + min;
+const pick = arr => arr[Math.floor(Math.random() * arr.length)];
+
+// ---------- 開始遊戲 ----------
+function startGame() {
+  gameEl.querySelectorAll('.item, .pop').forEach(el => el.remove());
+
+  state = {
+    score: 0,
+    lives: MAX_LIVES,
+    playerX: (W - PLAYER_W) / 2,
+    items: [],
+    spawnTimer: 0,
+    spawnInterval: 950,
+    fallSpeed: 0.17,
+    elapsed: 0,
+    running: true
+  };
+
+  scoreEl.textContent = '0';
+  livesEl.textContent = '♥♥♥';
+  overlay.classList.add('hidden');
+
+  lastTime = performance.now();
+  cancelAnimationFrame(rafId);
+  rafId = requestAnimationFrame(loop);
+}
+
+// ---------- 產生掉落物件 ----------
+function spawnItem() {
+  const isGood = Math.random() < 0.72;   // 72% 糖果, 28% 毒藥
+  const data = isGood ? pick(GOOD) : pick(BAD);
+
+  const el = document.createElement('div');
+  el.className = 'item ' + (isGood ? 'good' : 'bad');
+  el.textContent = data.emoji;
+
+  const x = rand(8, W - ITEM_SIZE - 8);
+
+  const item = { el, x, y: -ITEM_SIZE, good: isGood, name: data.name, dead: false };
+  el.style.transform = `translate(${x}px, ${item.y}px)`;
+  gameEl.appendChild(el);
+  state.items.push(item);
+}
+
+// ---------- 分數彈出 ----------
+function showPop(text, x, y, positive) {
+  const pop = document.createElement('div');
+  pop.className = 'pop ' + (positive ? 'plus' : 'minus');
+  pop.textContent = text;
+  pop.style.left = x + 'px';
+  pop.style.top  = y + 'px';
+  gameEl.appendChild(pop);
+  setTimeout(() => pop.remove(), 700);
+}
+
+// ---------- 更新 HUD ----------
+function updateHUD() {
+  scoreEl.textContent = state.score;
+  livesEl.textContent = state.lives > 0 ? '♥'.repeat(state.lives) : '—';
+}
+
+// ---------- 遊戲結束 ----------
+function gameOver() {
+  state.running = false;
+  cancelAnimationFrame(rafId);
+
+  overlay.innerHTML = `
+    <h1>遊戲結束</h1>
+    <p class="final">最終分數<br><b>${state.score}</b></p>
+    <p>你接到好多糖果呀！下次試吓避開所有毒藥啦 🍬</p>
+    <button id="btn">再玩一次</button>
+  `;
+  overlay.classList.remove('hidden');
+  document.getElementById('btn').addEventListener('click', startGame);
+}
+
+// ---------- 主迴圈 ----------
+function loop(now) {
+  if (!state.running) return;
+
+  const dt = Math.min(now - lastTime, 50);
+  lastTime = now;
+  state.elapsed += dt;
+
+  // 難度慢慢增加
+  state.spawnInterval = Math.max(380, 950 - state.elapsed / 45);
+  state.fallSpeed     = Math.min(0.55, 0.17 + state.elapsed / 90000);
+
+  // 產生新物件
+  state.spawnTimer += dt;
+  if (state.spawnTimer >= state.spawnInterval) {
+    state.spawnTimer = 0;
+    spawnItem();
+  }
+
+  // 鍵盤移動
+  const speed = 0.45 * dt;
+  if (keys.ArrowLeft)  state.playerX -= speed;
+  if (keys.ArrowRight) state.playerX += speed;
+  state.playerX = Math.max(0, Math.min(W - PLAYER_W, state.playerX));
+  playerEl.style.transform = `translateX(${state.playerX}px)`;
+
+  // 碰撞判斷
+  const playerTop   = H - PLAYER_BOTTOM - 26;
+  const playerLeft  = state.playerX;
+  const playerRight = state.playerX + PLAYER_W;
+
+  for (const item of state.items) {
+    if (item.dead) continue;
+
+    item.y += state.fallSpeed * dt;
+    item.el.style.transform = `translate(${item.x}px, ${item.y}px)`;
+
+    const itemBottom = item.y + ITEM_SIZE;
+    const itemLeft   = item.x;
+    const itemRight  = item.x + ITEM_SIZE;
+    const itemCx     = item.x + ITEM_SIZE / 2;
+
+    const hitX = itemRight > playerLeft && itemLeft < playerRight;
+    const hitY = itemBottom >= playerTop && item.y < playerTop + 32;
+
+    if (hitX && hitY) {
+      item.dead = true;
+      item.el.remove();
+
+      if (item.good) {
+        state.score += 10;
+        showPop('+10', itemCx - 16, item.y, true);
+      } else {
+        state.lives -= 1;
+        state.score = Math.max(0, state.score - 5);
+        showPop('-5', itemCx - 16, item.y, false);
+        gameEl.animate(
+          [{transform:'translateX(0)'},{transform:'translateX(-6px)'},
+           {transform:'translateX(6px)'},{transform:'translateX(0)'}],
+          { duration: 180 }
+        );
+      }
+      updateHUD();
+      if (state.lives <= 0) { gameOver(); return; }
+      continue;
+    }
+
+    // 漏接糖果 → 扣一條命
+    if (item.y > H) {
+      item.dead = true;
+      item.el.remove();
+      if (item.good) {
+        state.lives -= 1;
+        updateHUD();
+        if (state.lives <= 0) { gameOver(); return; }
+      }
+    }
+  }
+
+  state.items = state.items.filter(i => !i.dead);
+  rafId = requestAnimationFrame(loop);
+}
+
+// ---------- 控制 ----------
+document.addEventListener('keydown', e => {
+  keys[e.key] = true;
+  if (['ArrowLeft','ArrowRight'].includes(e.key)) e.preventDefault();
+});
+document.addEventListener('keyup', e => { keys[e.key] = false; });
+
+gameEl.addEventListener('mousemove', e => {
+  if (!state || !state.running) return;
+  const rect = gameEl.getBoundingClientRect();
+  const mx = e.clientX - rect.left;
+  state.playerX = Math.max(0, Math.min(W - PLAYER_W, mx - PLAYER_W / 2));
+});
+
+gameEl.addEventListener('touchmove', e => {
+  if (!state || !state.running) return;
+  const rect = gameEl.getBoundingClientRect();
+  const mx = e.touches[0].clientX - rect.left;
+  state.playerX = Math.max(0, Math.min(W - PLAYER_W, mx - PLAYER_W / 2));
+  e.preventDefault();
+}, { passive: false });
+
+document.getElementById('btn').addEventListener('click', startGame);
+</script>
+</body>
+</html>
